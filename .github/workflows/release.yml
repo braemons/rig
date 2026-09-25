@@ -5,9 +5,10 @@ name: Release
 #   git tag v0.3.0-alpha1 && git push origin v0.3.0-alpha1
 #
 # Builds braemons-rig and braemons (arch: all) once, and braemons-tools for
-# amd64 and arm64 on native runners, then attaches the .debs to a GitHub
-# release. braemons/packages pulls them into the apt archive from there; this
-# repository holds no signing key.
+# amd64 and arm64 on native runners, then the Raspberry Pi image from them, and
+# attaches the .debs and the image to a GitHub release. braemons/packages pulls
+# the .debs into the apt archive from there; this repository holds no signing
+# key.
 on:
   push:
     tags: ['v*']
@@ -50,8 +51,77 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  release:
+  # The Raspberry Pi image. The daemons, gpiochip-daqd and the console come
+  # from the archive; this release's own three packages are not there yet
+  # (braemons/packages ingests releases on a schedule), so they go in as extra
+  # .debs from the job above.
+  #
+  # Much slower than the package jobs: the chroot runs under qemu-user
+  # emulation and compiles the evdi kernel module with DKMS for every kernel
+  # in the image.
+  image:
     needs: packages
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # A stock runner has ~14 GB free on /, and the build needs room for a
+      # ~6.5 GB uncompressed working image plus the ~1 GB compressed output.
+      - name: Free up disk space
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
+          sudo docker image prune -af
+          df -h /
+
+      # The chroot is arm64 on an amd64 runner. --reset -p yes registers the
+      # handler with the F (fix-binary) flag, which is what makes the
+      # interpreter usable from inside the chroot's mount namespace.
+      - name: Register binfmt handlers
+        run: docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: pkg-*
+          path: artifacts
+
+      # Only the arm64 and arch-all .debs, into dist/: the one directory the
+      # image container sees.
+      - name: Collect this release's arm64 packages
+        run: |
+          mkdir -p dist
+          find artifacts \( -name '*_arm64.deb' -o -name '*_all.deb' \) -exec cp -v {} dist/ \;
+
+      # The login password defaults to the Makefile's (`braemons`), which is a
+      # known credential on a publicly downloadable image; the image forces a
+      # change at first login. Set an IMAGE_PASSWORD repository secret to
+      # override it for published builds.
+      - name: Build the SD image
+        env:
+          IMAGE_PASSWORD_SECRET: ${{ secrets.IMAGE_PASSWORD }}
+        run: |
+          if [ -n "$IMAGE_PASSWORD_SECRET" ]; then
+            export IMAGE_PASSWORD="$IMAGE_PASSWORD_SECRET"
+          fi
+          make image IMAGE_EXTRA_DEBS="$(ls dist/*.deb | tr '\n' ' ')"
+
+      # Deliberately not `dist/*`: that directory also holds the generated
+      # credentials file, when there is one, which must never leave the runner.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sd-image
+          path: |
+            dist/*.img.xz
+            dist/*.img.xz.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    needs: [packages, image]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
@@ -65,9 +135,23 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir release
-          find artifacts -name '*.deb' -exec cp -v {} release/ \;
+          find artifacts \( -name '*.deb' -o -name '*.img.xz' -o -name '*.img.xz.sha256' \) \
+            -exec cp -v {} release/ \;
+          # Belt and braces: the credentials file is excluded upstream, but
+          # never let one reach a public release asset.
+          rm -f release/*credentials*
           TAG=$GITHUB_REF_NAME
           NOTES=$(cat <<'NOTES_EOF'
+          ## Raspberry Pi 5: the ready-to-flash image
+
+          Write `braemons-*-raspios-lite-arm64.img.xz` to an SD card with
+          balenaEtcher or Raspberry Pi Imager, after checking it against its
+          `.sha256`. The rig boots into `vstimd.target`, names itself
+          `braemons-XXXXXX`, and serves the console at
+          `http://braemons-XXXXXX.local:9000`. Log in over SSH as
+          `braemons-admin` / `braemons`; **you are made to change the
+          password at first login.** See docs/raspberry-pi-image.md.
+
           ## Installing
 
           From the braemons apt archive (see braemons/packages):

@@ -2,11 +2,11 @@
 #
 #   make meta     (from the repository root; VERSION comes from the git tag)
 #
-# Depends on what every rig needs and Recommends the four daemons, so
-# `apt install braemons` gives a full rig and `apt install --no-install-recommends
-# braemons` gives the rig without committing to any daemon. A box that runs
-# only one daemon installs that daemon's package, and braemons-rig if it wants
-# the name, and never this.
+# Depends on what every rig needs and Recommends the four daemons and the
+# console, so `apt install braemons` gives a full rig and
+# `apt install --no-install-recommends braemons` gives the rig without
+# committing to any daemon. A box that runs only one daemon installs that
+# daemon's package, and braemons-rig if it wants the name, and never this.
 
 name: braemons
 arch: all
@@ -16,10 +16,10 @@ section: science
 priority: optional
 maintainer: ${MAINTAINER}
 description: |
-  A whole braemons rig: the rig itself, the command-line tools, and the four
-  daemons (recommended, so each can be left out). vstimd drives the display,
-  statemachined the state machine board, mousewheeld the running wheel, and
-  triald the trial logic.
+  A whole braemons rig: the rig itself, the command-line tools, the four
+  daemons and the console (recommended, so each can be left out). vstimd drives
+  the display, statemachined the state machine board, mousewheeld the running
+  wheel, triald the trial logic, and the console shows all four on one page.
 vendor: braemons
 homepage: https://github.com/braemons/rig
 license: AGPL-3.0-or-later
@@ -32,3 +32,4 @@ recommends:
   - braemons-statemachined
   - braemons-mousewheeld
   - braemons-triald
+  - braemons-console
