@@ -1,0 +1,44 @@
+# braemons-rig: what makes a box a braemons rig, whichever daemons it runs.
+#
+#   make rig      (from the repository root; VERSION comes from the git tag)
+#
+# Architecture-independent: two shell files, a unit and a tmpfiles rule.
+
+name: braemons-rig
+arch: all
+platform: linux
+version: ${VERSION}
+section: science
+priority: optional
+maintainer: ${MAINTAINER}
+description: |
+  A braemons rig: the box's name and the directories every daemon shares.
+  Names the box braemons-XXXXXX after its network interface's MAC address at
+  boot, and creates /etc/braemons and /var/lib/braemons. Installed on any box
+  that runs a braemons daemon; the daemons themselves do not depend on it.
+vendor: braemons
+homepage: https://github.com/braemons/rig
+license: AGPL-3.0-or-later
+
+depends:
+  - systemd
+# For the box's own `.local` name (ssh, the browser, Samba). Each daemon
+# advertises its service over mDNS itself and needs no Avahi to do it.
+recommends:
+  - avahi-daemon
+
+contents:
+  - src: ./braemons-set-hostname
+    dst: /usr/sbin/braemons-set-hostname
+    file_info:
+      mode: 0755
+
+  - src: ./braemons-hostname.service
+    dst: /lib/systemd/system/braemons-hostname.service
+
+  - src: ./braemons.tmpfiles.conf
+    dst: /usr/lib/tmpfiles.d/braemons.conf
+
+scripts:
+  postinstall: ./postinstall.sh
+  preremove: ./preremove.sh

@@ -1,0 +1,85 @@
+name: Release
+
+# Tag-driven, like every braemons repository:
+#
+#   git tag v0.3.0-alpha1 && git push origin v0.3.0-alpha1
+#
+# Builds braemons-rig and braemons (arch: all) once, and braemons-tools for
+# amd64 and arm64 on native runners, then attaches the .debs to a GitHub
+# release. braemons/packages pulls them into the apt archive from there; this
+# repository holds no signing key.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  packages:
+    name: packages-${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: amd64, runner: ubuntu-24.04, nfpm: x86_64, all: true }
+          - { arch: arm64, runner: ubuntu-24.04-arm, nfpm: arm64, all: false }
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # git-version.sh reads the tag; a shallow clone has none.
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+      - name: Install nfpm
+        run: |
+          curl -fsSL "https://github.com/goreleaser/nfpm/releases/download/v2.43.1/nfpm_2.43.1_Linux_${{ matrix.nfpm }}.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin nfpm
+      - name: Resolve version
+        run: echo "building version $(make -s print-version)"
+      - name: braemons-tools
+        run: make tools
+      - name: braemons-rig and braemons
+        if: matrix.all
+        run: make rig meta
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pkg-${{ matrix.arch }}
+          path: dist/*.deb
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    needs: packages
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir release
+          find artifacts -name '*.deb' -exec cp -v {} release/ \;
+          TAG=$GITHUB_REF_NAME
+          NOTES=$(cat <<'NOTES_EOF'
+          ## Installing
+
+          From the braemons apt archive (see braemons/packages):
+
+              sudo apt install braemons          # a whole rig
+              sudo apt install braemons-rig      # only the rig's name and directories
+              sudo apt install braemons-tools    # only the four command-line tools
+
+          Or from these files: `sudo apt install ./braemons-rig_*_all.deb`.
+          NOTES_EOF
+          )
+          PRERELEASE=""
+          case "$TAG" in *-*) PRERELEASE="--prerelease" ;; esac
+          gh release create "$TAG" release/* --repo "$GITHUB_REPOSITORY" \
+            --title "$TAG" --notes "$NOTES" $PRERELEASE

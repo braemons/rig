@@ -1,0 +1,6 @@
+#!/opt/braemons/tools/bin/python3 -I
+# statemachinectl, from braemons-tools. -I: nothing in the caller's environment or home
+# directory decides which code runs.
+from statemachined_client.command_line_interface import main
+
+raise SystemExit(main())

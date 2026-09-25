@@ -1,0 +1,98 @@
+#!/bin/bash
+# braemons-set-hostname — name this rig after its primary network interface.
+#
+# Naming scheme: braemons-XXXXXX, where XXXXXX is the last 6 hex characters of
+# the MAC. That is 15 characters, which is Samba's NetBIOS limit, so the SMB
+# name and the DNS name are the same. It is stable across reboots and
+# re-flashes without any stored state, and readable when matching a box on the
+# bench to a name on the network.
+#
+# The name is the box's, not any one daemon's: a rig can run vstimd,
+# statemachined, mousewheeld and triald together. Each of them advertises its
+# own `_<daemon>._tcp` record from inside the daemon, with a `rig=` TXT record
+# they share, so nothing here writes a service file. Avahi and Samba inherit
+# the system hostname by default (no host-name= or netbios name to keep in
+# step), so setting it here is enough for `braemons-XXXXXX.local` and
+# `\\braemons-XXXXXX` to work.
+#
+# Must run before avahi-daemon, smbd and nmbd start; braemons-hostname.service
+# orders it ahead of them. Idempotent: a box already named braemons-XXXXXX is
+# left alone.
+set -euo pipefail
+
+die() { echo "braemons-set-hostname: error: $*" >&2; exit 1; }
+
+# Keep the Debian-style "127.0.1.1 <hostname>" line in /etc/hosts in sync.
+# `hostname -F` changes only the kernel's hostname and /etc/hostname, never
+# /etc/hosts — so without this, anything that resolves the local hostname
+# through /etc/hosts (sudo, some getaddrinfo paths) fails right after a rename.
+update_etc_hosts() {
+    if grep -q '^127\.0\.1\.1[[:space:]]' /etc/hosts; then
+        sed -i "s/^127\.0\.1\.1[[:space:]].*/127.0.1.1\t${NEW_HOSTNAME}/" /etc/hosts
+    else
+        printf '127.0.1.1\t%s\n' "$NEW_HOSTNAME" >> /etc/hosts
+    fi
+}
+
+# The primary interface: a wired NIC by its usual names, else the first
+# non-loopback interface that has a MAC at all.
+find_iface() {
+    for candidate in eth0 end0 eno1; do
+        if [ -e "/sys/class/net/$candidate/address" ]; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+    for path in /sys/class/net/*/address; do
+        [ -e "$path" ] || continue
+        dev=$(basename "$(dirname "$path")")
+        [ "$dev" = "lo" ] && continue
+        echo "$dev"
+        return 0
+    done
+    return 1
+}
+
+# This runs early (Before=sysinit.target), before udev has necessarily probed
+# every device. On a Raspberry Pi 5 the onboard NIC hangs off the RP1
+# southbridge over PCIe and can enumerate a few seconds after the rest, so the
+# interface may not exist yet on the first look: retry for a bounded time
+# rather than failing, which is what an earlier version did on every real
+# board.
+IFACE=""
+DEADLINE=$(($(date +%s) + 20))
+while [ -z "$IFACE" ]; do
+    IFACE=$(find_iface || true)
+    [ -n "$IFACE" ] && break
+    [ "$(date +%s)" -lt "$DEADLINE" ] || break
+    sleep 0.2
+done
+[ -n "$IFACE" ] || die "no network interface with a MAC address found (waited 20s)"
+
+MAC=$(cat "/sys/class/net/$IFACE/address") || die "cannot read MAC for $IFACE"
+SUFFIX=$(printf '%s' "$MAC" | tr -d ':' | tr '[:upper:]' '[:lower:]' | tail -c 6)
+[ -n "$SUFFIX" ] || die "could not derive suffix from MAC '$MAC'"
+
+NEW_HOSTNAME="braemons-${SUFFIX}"
+CURRENT_HOSTNAME=$(hostname)
+
+if [ "$CURRENT_HOSTNAME" = "$NEW_HOSTNAME" ]; then
+    echo "braemons-set-hostname: hostname already $NEW_HOSTNAME — nothing to do"
+    exit 0
+fi
+
+echo "braemons-set-hostname: setting hostname to $NEW_HOSTNAME (from $IFACE MAC $MAC)"
+
+# /etc/hostname and sethostname(2) directly, not hostnamectl: that talks to
+# systemd-hostnamed over D-Bus, and this runs before sysinit.target, earlier
+# than dbus.service is guaranteed to be up.
+echo "$NEW_HOSTNAME" > /etc/hostname
+hostname -F /etc/hostname
+
+update_etc_hosts
+
+# For a re-run on a live system (by hand, or after a NIC swap), where these are
+# already running with the old name. On a normal boot they have not started
+# yet, and try-restart does nothing to a unit that is not active.
+systemctl try-restart avahi-daemon.service smb.service smbd.service nmb.service nmbd.service \
+    2>/dev/null || true

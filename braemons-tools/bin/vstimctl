@@ -1,0 +1,6 @@
+#!/opt/braemons/tools/bin/python3 -I
+# vstimctl, from braemons-tools. -I: nothing in the caller's environment or home
+# directory decides which code runs.
+from vstimd_client.command_line_interface import main
+
+raise SystemExit(main())

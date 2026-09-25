@@ -1,0 +1,10 @@
+# The four clients braemons-tools installs, each pinned to a release. Bumping
+# one is a deliberate change here, like a pin in contracts/e2e-tests: a tool
+# that floated to "latest" would change under a rig nobody touched.
+#
+# From where each daemon publishes its client: vstimd-client on PyPI, the other
+# three as wheels on their daemon's GitHub release.
+vstimd-client==0.3.0a2
+statemachined-client @ https://github.com/braemons/statemachined/releases/download/v0.3.0-alpha2/statemachined_client-0.3.0a2-py3-none-any.whl
+mousewheeld-client @ https://github.com/braemons/mousewheeld/releases/download/v0.3.0-alpha2/mousewheeld_client-0.3.0a2-py3-none-any.whl
+triald-client @ https://github.com/braemons/triald/releases/download/v0.3.0-alpha3/triald_client-0.3.0a3-py3-none-any.whl

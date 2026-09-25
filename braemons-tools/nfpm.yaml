@@ -1,0 +1,48 @@
+# braemons-tools: the four daemons' command-line clients, in one place.
+#
+#   make tools    (from the repository root; stages build/tools first)
+#
+# vstimctl, statemachinectl, mousewheelctl and trialctl, each from its
+# daemon's own client distribution at the version pinned in clients.txt, in
+# one vendored Python under /opt/braemons/tools. Vendored because the clients
+# need Python 3.12 and Raspberry Pi OS ships 3.11, and because an OS upgrade
+# that moves Python must not break the commands a rig is repaired with.
+# Per-architecture for the same reason: the interpreter is native.
+
+name: braemons-tools
+arch: ${ARCH}
+platform: linux
+version: ${VERSION}
+section: science
+priority: optional
+maintainer: ${MAINTAINER}
+description: |
+  Command-line tools for a braemons rig: vstimctl, statemachinectl,
+  mousewheelctl and trialctl. They follow one set of rules, so every tool
+  takes --rig (or $BRAEMONS_RIG), prints JSON and returns the same exit
+  statuses. They run from a Python of their own under /opt/braemons/tools.
+vendor: braemons
+homepage: https://github.com/braemons/rig
+license: AGPL-3.0-or-later
+
+contents:
+  - src: ../build/tools/
+    dst: /opt/braemons/tools
+    type: tree
+
+  - src: ./bin/vstimctl
+    dst: /usr/bin/vstimctl
+    file_info:
+      mode: 0755
+  - src: ./bin/statemachinectl
+    dst: /usr/bin/statemachinectl
+    file_info:
+      mode: 0755
+  - src: ./bin/mousewheelctl
+    dst: /usr/bin/mousewheelctl
+    file_info:
+      mode: 0755
+  - src: ./bin/trialctl
+    dst: /usr/bin/trialctl
+    file_info:
+      mode: 0755

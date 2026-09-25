@@ -1,0 +1,16 @@
+[Unit]
+Description=Name this braemons rig after its primary network interface
+Documentation=https://github.com/braemons/rig
+DefaultDependencies=no
+Conflicts=shutdown.target
+After=systemd-udevd.service local-fs.target
+Before=sysinit.target shutdown.target avahi-daemon.service smb.service smbd.service nmb.service nmbd.service
+Wants=systemd-udevd.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/braemons-set-hostname
+RemainAfterExit=yes
+
+[Install]
+WantedBy=sysinit.target
