@@ -1,7 +1,8 @@
 # braemons rig
 
 This repository builds the packages that make a box a braemons rig, apart from
-the daemons themselves. A rig can run any of the four daemons:
+the daemons themselves, and the Raspberry Pi image that puts a whole rig on an
+SD card. A rig can run any of the four daemons:
 [vstimd](https://github.com/braemons/vstimd) drives the display,
 [statemachined](https://github.com/braemons/statemachined) the state machine
 board, [mousewheeld](https://github.com/braemons/mousewheeld) the running
@@ -12,7 +13,7 @@ they share lives here rather than in any one of them.
 |---|---|---|
 | `braemons-rig` | the box's name, `braemons-XXXXXX`, and `/etc/braemons` and `/var/lib/braemons` | all |
 | `braemons-tools` | `vstimctl`, `statemachinectl`, `mousewheelctl` and `trialctl`, in one vendored Python | amd64, arm64 |
-| `braemons` | depends on the two above, and recommends the four daemons | all |
+| `braemons` | depends on the two above, and recommends the four daemons and the [console](https://github.com/braemons/console) | all |
 
 ```bash
 sudo apt install braemons                          # a whole rig
@@ -27,6 +28,16 @@ machine.
 **No daemon depends on anything here.** A box that runs only statemachined
 installs `braemons-statemachined` and works. It keeps its stock hostname until
 `braemons-rig` is installed, and its tool is a `pip install` away.
+
+## The Raspberry Pi image
+
+Every release attaches `braemons-<version>-raspios-lite-arm64.img.xz`: Raspberry
+Pi OS Lite with every braemons package installed from the apt archive — the
+four daemons, gpiochip-daqd, the console and the tools — plus SSH, the Samba
+shares and the Pi 5 defaults. Flash it and the rig serves the console at
+`http://braemons-XXXXXX.local:9000`. See
+[docs/raspberry-pi-image.md](docs/raspberry-pi-image.md) for flashing, first
+boot, and `make image`.
 
 ## `braemons-rig`: the rig's name
 
@@ -49,6 +60,11 @@ Run `sudo systemctl start braemons-hostname` to rename the box now, or
 Nothing else reads the name: every daemon advertises `_<daemon>._tcp` over mDNS
 itself, under whatever the hostname is, with a `rig=` TXT record they all share
 (`sha256("braemons:" + machine-id)`), which is how a console groups them.
+
+It also ships the rig's two Samba shares, `braemons-config` (`/etc/braemons`)
+and `braemons-data` (`/var/lib/braemons`), as
+`/usr/share/braemons/rig/braemons-shares.conf`. They are inert until
+`smb.conf` includes that file, which the image does.
 
 ## `braemons-tools`: the four commands
 
@@ -79,10 +95,12 @@ deliberate change, like a pin in the end-to-end suite.
 make packages                 # all three, for this machine, into dist/
 make check                    # stage the tools and run each command's --version
 make check CLIENTS=local.txt  # the same against client checkouts, one path per line
+make image                    # the Raspberry Pi image, from the archive (Docker)
 ```
 
 The version is the latest `v*` tag (`scripts/git-version.sh`), or
-`RIG_VERSION=...`. It needs `uv` and `nfpm`. A tag builds the release:
+`RIG_VERSION=...`. It needs `uv` and `nfpm`, and Docker for the image. A tag
+builds the release, image included:
 
 ```bash
 git tag v0.3.0-alpha1 && git push origin v0.3.0-alpha1

@@ -19,7 +19,7 @@ jobs:
             | sudo tar -xz -C /usr/local/bin nfpm
           sudo apt-get install -y -qq shellcheck
       - name: shellcheck
-        run: shellcheck braemons-rig/braemons-set-hostname braemons-rig/*.sh scripts/git-version.sh
+        run: shellcheck braemons-rig/braemons-set-hostname braemons-rig/*.sh scripts/git-version.sh image/build-sd-image.sh
       # Before the first tag there is no version to read; CI builds with a
       # placeholder so a package that does not build is caught before a release.
       - name: Build the three packages
@@ -30,4 +30,5 @@ jobs:
             apt-get update -qq
             apt-get install -y -qq /dist/braemons-tools_*.deb /dist/braemons-rig_*.deb
             for command in vstimctl statemachinectl mousewheelctl trialctl; do "$command" --version; done
-            test -d /etc/braemons && test -d /var/lib/braemons'
+            test -d /etc/braemons && test -d /var/lib/braemons
+            test -f /usr/share/braemons/rig/braemons-shares.conf'

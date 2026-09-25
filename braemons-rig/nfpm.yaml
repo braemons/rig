@@ -2,7 +2,8 @@
 #
 #   make rig      (from the repository root; VERSION comes from the git tag)
 #
-# Architecture-independent: two shell files, a unit and a tmpfiles rule.
+# Architecture-independent: two shell files, a unit, a tmpfiles rule and the
+# Samba shares, which are inert until smb.conf includes them.
 
 name: braemons-rig
 arch: all
@@ -38,6 +39,9 @@ contents:
 
   - src: ./braemons.tmpfiles.conf
     dst: /usr/lib/tmpfiles.d/braemons.conf
+
+  - src: ./braemons-shares.conf
+    dst: /usr/share/braemons/rig/braemons-shares.conf
 
 scripts:
   postinstall: ./postinstall.sh
