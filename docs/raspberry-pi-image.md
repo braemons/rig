@@ -155,7 +155,7 @@ ssh braemons-admin@braemons-a1b2c3.local
 
 | | |
 |---|---|
-| User | `braemons-admin` — a normal `sudo` account, **not** one of the daemons' service accounts (which have no login shell) |
+| User | `braemons-admin` — a normal `sudo` account, **not** one of the daemons' service accounts (which have no login shell). Also in `dialout`, `gpio`, `i2c`, `spi`, `video`, `render`, `input`, `plugdev`, `adm` and `systemd-journal`, so the boards, the header and the daemons' logs are reachable without `sudo` |
 | Password | `braemons`, unless the release notes for your download say otherwise |
 | First login | You are **forced to change the password** (`chage -d 0`) before you get a shell |
 
@@ -272,11 +272,11 @@ re-flashing for a new rig or a failed card.
 | Rig config | `/usr/share/braemons/vstimd/raspberry-pi-5.toml` installed as `/etc/braemons/vstimd-rig-config.toml` (not the generic all-commented-out default) |
 | GPIO config | `raspberry-pi-5_in16_out4.toml` installed as `/etc/braemons/gpiochip-daqd-config.toml` |
 | Services | `sshd`, `smbd`/`nmbd` with both shares (`braemons-rig`'s `braemons-shares.conf`), `avahi-daemon`, `wsdd2` |
-| Login | `braemons-admin` in `sudo`, password change forced at first login, Samba password kept in sync by a `pam_exec` hook |
+| Login | `braemons-admin` in `sudo` and the device and log groups, password change forced at first login, Samba password kept in sync by a `pam_exec` hook |
 | Updates | `/etc/apt/sources.list.d/braemons.sources` + `/etc/apt/keyrings/braemons.asc`, plus an unattended-upgrade conffile policy so a headless rig never hangs on a dpkg prompt |
 | DisplayLink | `displaylink-driver` with `evdi` pinned to 1.14.16 and DKMS-built for both shipped kernels (see [caveats](https://vstimd.readthedocs.io/en/latest/developer/platform-notes/)) |
 | Workaround | udev rule disabling Energy-Efficient Ethernet, which otherwise drops the Pi 5's link |
-| Dev tooling | `git`, `build-essential`, the vstimd build dependencies, a rustup toolchain for `braemons-admin`, plus `btop`, `vim`, `tmux` |
+| Dev tooling | `git`, `build-essential`, the vstimd build dependencies, `protobuf-compiler` with the well-known types (`libprotobuf-dev`), `cmake`, `ninja-build`, `clang`/`clangd`, `npm`, `dfu-util`, `shellcheck`, `gh`; for `braemons-admin` a rustup toolchain and uv with PlatformIO 6.1.16 and clang-format 23.1.0; plus `btop`, `vim`, `tmux`. Enough to build, test and flash every repository in the family on the Pi itself |
 
 The stock `dtoverlay=vc4-kms-v3d` (full KMS) that vstimd's DRM backend needs is
 already the Raspberry Pi OS default — no `config.txt` edit is required.

@@ -248,7 +248,28 @@ apt-get install -y --no-install-recommends btop vim tmux
 apt-get install -y --no-install-recommends \
     git build-essential pkg-config \
     libinput-dev libudev-dev libdrm-dev libwayland-dev \
-    protobuf-compiler
+    protobuf-compiler libprotobuf-dev
+
+# And the rest of what developing the family on the Pi itself takes -- the Pi 5
+# is a development platform, not only a rig:
+#   cmake ninja-build clang clangd  statemachined's host build and tests
+#                                   (its BUILD.md), and the editor's view of them
+#   npm                             the web panels (statemachined, vstimd); node
+#                                   itself comes in with the console
+#   dfu-util                        flashing the Uno R4 Minima by hand
+#   shellcheck                      what the rig and console CI lint with
+#   gh                              pull requests and CI artifacts
+# uv, PlatformIO and the pinned clang-format are per-user tools, installed for
+# IMAGE_USER below beside rustup.
+apt-get install -y --no-install-recommends \
+    cmake ninja-build clang clangd npm dfu-util shellcheck gh
+
+# The Uno R4's bootloader enumerates as its own USB device (2341:0369) with no
+# serial port, so the tty rules do not cover it: without this, dfu-util needs
+# root. plugdev, which IMAGE_USER is in.
+cat > /etc/udev/rules.d/60-arduino-dfu.rules <<'DFU_EOF'
+SUBSYSTEM=="usb", ATTRS{idVendor}=="2341", ATTRS{idProduct}=="0369", MODE="0660", GROUP="plugdev"
+DFU_EOF
 
 # Energy-Efficient Ethernet makes the Pi 5's NIC drop connections (see vstimd's
 # docs/developer/platform-notes.md). A udev rule rather than a oneshot unit so
@@ -501,7 +522,20 @@ install -m 0644 \
 # Admin login for SSH + Samba. The password is expired at the very end of this
 # script rather than here -- see the 'chage -d 0' below for why the ordering
 # matters.
-useradd -m -s /bin/bash -G sudo "${IMAGE_USER}"
+#
+# The other groups are for working on the rig by hand while the daemons own it:
+# dialout for the boards' serial ports (flashing, the hardware suites),
+# gpio/i2c/spi for the header, video/render/input for what vstimd drives,
+# plugdev for USB devices, and adm/systemd-journal to read the daemons' logs.
+# Filtered against what exists, so a base image that drops one of them does
+# not fail useradd. Escaped: this runs in the chroot, not at heredoc time.
+USER_GROUPS=sudo
+for group in dialout gpio i2c spi video render input plugdev adm systemd-journal; do
+    if getent group "\$group" >/dev/null; then
+        USER_GROUPS="\$USER_GROUPS,\$group"
+    fi
+done
+useradd -m -s /bin/bash -G "\$USER_GROUPS" "${IMAGE_USER}"
 echo "${IMAGE_USER}:${IMAGE_PASSWORD}" | chpasswd
 systemctl enable ssh
 
@@ -528,6 +562,16 @@ systemctl disable userconfig.service 2>/dev/null || true
 # toolchain a non-root SSH login can't update.
 su - "${IMAGE_USER}" -c \
     'curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile default'
+
+# uv, the same way and for the same reason: per-user, into ~/.local/bin, and
+# what every repository in the family drives its Python with. Then the two tools
+# statemachined pins, at its pins (its Makefile's PLATFORMIO_PIN and
+# CLANG_FORMAT_PIN): a formatter at another version rewrites files CI then
+# rejects. PlatformIO fetches its board toolchains on first use, not here.
+su - "${IMAGE_USER}" -c \
+    'curl --proto "=https" --tlsv1.2 -LsSf https://astral.sh/uv/install.sh | sh'
+su - "${IMAGE_USER}" -c \
+    '~/.local/bin/uv tool install platformio==6.1.16 && ~/.local/bin/uv tool install clang-format==23.1.0'
 
 # Force a password change at first login: a publicly downloadable image must
 # not leave a known password valid indefinitely, generated or not.
